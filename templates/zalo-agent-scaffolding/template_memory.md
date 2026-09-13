@@ -20,7 +20,7 @@ Trí nhớ bền vững giúp AI Agent nhận ra khách quen, hiểu lịch sử
 ## 2. Cấu Trúc File Trí Nhớ Mẫu (`memory.json` hoặc Markdown)
 
 ```markdown
-### Hồ Sơ Khách Hàng: Anh Tuấn (Zalo UID: 8559208098475106978)
+### Hồ Sơ Khách Hàng: Anh Tuấn (Zalo UID: <ZALO_USER_ID>)
 - Ngành nghề: Đại lý Du lịch & Vận chuyển Phú Quý.
 - Sản phẩm quan tâm: Gói AI Agent chăm sóc tour tự động 24/7.
 - Ghi chú riêng: Thích trả lời ngắn gọn, hay nhắn việc vào buổi sáng sớm, không thích gọi điện thoại ban đêm.
