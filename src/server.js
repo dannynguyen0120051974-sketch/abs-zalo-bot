@@ -800,6 +800,91 @@ export function createApp({
     }
   });
 
+  app.post("/api/groups/join-link", async (req, res) => {
+    try {
+      const accountId = req.body?.account_id || config.default_account_id;
+      const { link } = req.body || {};
+      if (!link) return res.status(400).json({ ok: false, error: "link_required" });
+      const runtime = hub.getRuntime(accountId);
+      if (!runtime.api) return res.status(400).json({ ok: false, error: "not_connected" });
+      const result = await runtime.joinGroupLink(link);
+      res.json({ ok: true, result });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err?.message || err) });
+    }
+  });
+
+  app.post("/api/groups/link-info", async (req, res) => {
+    try {
+      const accountId = req.body?.account_id || config.default_account_id;
+      const { link } = req.body || {};
+      if (!link) return res.status(400).json({ ok: false, error: "link_required" });
+      const runtime = hub.getRuntime(accountId);
+      if (!runtime.api) return res.status(400).json({ ok: false, error: "not_connected" });
+      const result = await runtime.getGroupLinkInfo(link);
+      res.json({ ok: true, result });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err?.message || err) });
+    }
+  });
+
+  app.post("/api/groups/join-invite-box", async (req, res) => {
+    try {
+      const accountId = req.body?.account_id || config.default_account_id;
+      const { group_id } = req.body || {};
+      if (!group_id) return res.status(400).json({ ok: false, error: "group_id_required" });
+      const runtime = hub.getRuntime(accountId);
+      if (!runtime.api) return res.status(400).json({ ok: false, error: "not_connected" });
+      const result = await runtime.joinGroupInviteBox(group_id);
+      res.json({ ok: true, result });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err?.message || err) });
+    }
+  });
+
+  app.get("/api/stickers/search", async (req, res) => {
+    try {
+      const accountId = req.query?.account_id || config.default_account_id;
+      const keyword = String(req.query?.keyword || "").trim();
+      if (!keyword) return res.status(400).json({ ok: false, error: "keyword_required" });
+      const runtime = hub.getRuntime(accountId);
+      if (!runtime.api) return res.status(400).json({ ok: false, error: "not_connected" });
+      const result = await runtime.searchStickers(keyword);
+      res.json({ ok: true, result });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err?.message || err) });
+    }
+  });
+
+  app.get("/api/stickers/:stickerId", async (req, res) => {
+    try {
+      const accountId = req.query?.account_id || config.default_account_id;
+      const runtime = hub.getRuntime(accountId);
+      if (!runtime.api) return res.status(400).json({ ok: false, error: "not_connected" });
+      const result = await runtime.getStickerDetail(req.params.stickerId);
+      res.json({ ok: true, result });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err?.message || err) });
+    }
+  });
+
+  app.get("/api/groups/:groupId/history-range", async (req, res) => {
+    try {
+      const sinceHours = req.query?.since_hours ? Number(req.query.since_hours) : 24;
+      const limit = req.query?.limit ? Number(req.query.limit) : 50;
+      const cursor = req.query?.cursor || null;
+      const result = store.readHistoryRange({
+        sourceId: req.params.groupId,
+        sinceHours,
+        cursor,
+        limit,
+      });
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err?.message || err) });
+    }
+  });
+
   app.post("/api/groups/:groupId/link", async (req, res) => {
     try {
       const accountId = req.body?.account_id || config.default_account_id;

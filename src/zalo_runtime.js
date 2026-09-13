@@ -5,6 +5,9 @@ import { EventEmitter } from "node:events";
 import { normalizeInboundMessage, utcNow } from "./schema.js";
 import { stageHermesMedia } from "./hermes_media.js";
 import { buildZaloStyledMessage, splitIntoSafeZaloChunks } from "./zalo_styler.js";
+import { findMentions } from "./zalo_mentions.js";
+import { enrichSticker, stickerRefOf } from "./zalo_stickers.js";
+import { classifyAttachments } from "./zalo_attachments.js";
 
 const PERSONAL_ACTIONS = new Set([
   "send_message", "send_sticker", "send_voice", "send_video", "forward_message", "typing",
@@ -12,7 +15,8 @@ const PERSONAL_ACTIONS = new Set([
   "create_note", "change_avatar", "block_member", "unblock_member", "review_pending",
   "group_link_enable", "group_link_disable", "send_card", "send_bank_card",
   "friend_accept", "friend_reject", "friend_request", "friend_request_undo", "friend_remove",
-  "user_block", "user_unblock"
+  "user_block", "user_unblock",
+  "join_group_link", "join_group_invite_box", "get_group_link_info", "get_sticker_detail", "search_stickers"
 ]);
 
 function required(value, name) {
@@ -475,6 +479,31 @@ export class AccountRuntime extends EventEmitter {
     return this.api.updateGroupSettings(settings, String(groupId));
   }
 
+  async joinGroupLink(link) {
+    if (!this.api?.joinGroupLink) throw new Error("not_connected");
+    return this.api.joinGroupLink(String(link));
+  }
+
+  async getGroupLinkInfo(link) {
+    if (!this.api?.getGroupLinkInfo) throw new Error("not_connected");
+    return this.api.getGroupLinkInfo({ link: String(link) });
+  }
+
+  async joinGroupInviteBox(groupId) {
+    if (!this.api?.joinGroupInviteBox) throw new Error("not_connected");
+    return this.api.joinGroupInviteBox(String(groupId));
+  }
+
+  async getStickerDetail(stickerId) {
+    if (!this.api?.getStickersDetail) throw new Error("not_connected");
+    return this.api.getStickersDetail(Number(stickerId));
+  }
+
+  async searchStickers(keyword) {
+    if (!this.api?.getStickers) throw new Error("not_connected");
+    return this.api.getStickers(String(keyword));
+  }
+
   async performPersonalAction(action, payload = {}) {
     const name = String(action || "").trim();
     if (!PERSONAL_ACTIONS.has(name)) throw new Error("unsupported_personal_action");
@@ -485,6 +514,16 @@ export class AccountRuntime extends EventEmitter {
       case "send_message": {
         if (typeof api.sendMessage !== "function") break;
         let textContent = String(payload.text || "");
+        if (textContent.includes("[[NEW_MESSAGE]]")) {
+          const parts = textContent.split(/\[\[NEW_MESSAGE\]\]/g).map((p) => p.trim()).filter(Boolean);
+          if (parts.length > 1) {
+            let lastRes = null;
+            for (const part of parts) {
+              lastRes = await this.performPersonalAction("send_message", { ...payload, text: part });
+            }
+            return lastRes;
+          }
+        }
         let styles = Array.isArray(payload.styles) ? payload.styles : undefined;
         if (!styles && (payload.styled || payload.parse_markdown || /[*_~#\[]/.test(textContent))) {
           const parsed = buildZaloStyledMessage(textContent);
@@ -494,7 +533,20 @@ export class AccountRuntime extends EventEmitter {
         const message = { msg: textContent.slice(0, 4000) };
         if (!message.msg && !payload.attachment_path) throw new Error("text_or_attachment_required");
         if (payload.quote) message.quote = payload.quote;
-        if (Array.isArray(payload.mentions)) message.mentions = payload.mentions.slice(0, 50);
+        if (Array.isArray(payload.mentions)) {
+          message.mentions = payload.mentions.slice(0, 50);
+        } else if (threadType(payload.thread_type) === 1 && textContent.includes("@") && typeof api.getGroupInfo === "function") {
+          try {
+            const groupInfo = await api.getGroupInfo(target());
+            const mems = groupInfo?.members || groupInfo?.memList || [];
+            if (Array.isArray(mems) && mems.length) {
+              const detected = findMentions(textContent, mems);
+              if (detected.length) message.mentions = detected;
+            }
+          } catch {
+            /* ignore mention fetch failure */
+          }
+        }
         if (payload.attachment_path) message.attachments = controlledAttachment(payload.attachment_path);
         if (styles) message.styles = styles;
         // Plaintext fallback: if Zalo rejects a styled message with a numeric error
@@ -576,6 +628,11 @@ export class AccountRuntime extends EventEmitter {
       case "friend_remove": if (typeof api.removeFriend === "function") return api.removeFriend(required(payload.user_id, "user_id")); break;
       case "user_block": if (typeof api.blockUser === "function") return api.blockUser(required(payload.user_id, "user_id")); break;
       case "user_unblock": if (typeof api.unblockUser === "function") return api.unblockUser(required(payload.user_id, "user_id")); break;
+      case "join_group_link": if (typeof api.joinGroupLink === "function") return api.joinGroupLink(required(payload.link, "link")); break;
+      case "join_group_invite_box": if (typeof api.joinGroupInviteBox === "function") return api.joinGroupInviteBox(required(payload.group_id, "group_id")); break;
+      case "get_group_link_info": if (typeof api.getGroupLinkInfo === "function") return api.getGroupLinkInfo({ link: required(payload.link, "link") }); break;
+      case "get_sticker_detail": if (typeof api.getStickersDetail === "function") return api.getStickersDetail(Number(required(payload.sticker_id, "sticker_id"))); break;
+      case "search_stickers": if (typeof api.getStickers === "function") return api.getStickers(required(payload.keyword, "keyword")); break;
       default: break;
     }
     throw new Error(`provider_action_unavailable:${name}`);

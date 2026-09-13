@@ -711,6 +711,51 @@ export class Store {
   }
 
   /**
+   * Đọc dải lịch sử chat theo giờ (sinceHours) từ SQLite nội bộ để phục vụ
+   * tóm tắt thảo luận nhóm mà không cần gọi Zalo API.
+   */
+  readHistoryRange({ sourceId, sinceHours = 24, cursor = null, limit = 50 } = {}) {
+    const hours = Math.min(Math.max(Number(sinceHours) || 24, 1), 168);
+    const lim = Math.min(Math.max(Number(limit) || 50, 1), 100);
+    const sinceIso = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+
+    let sql = `SELECT id, source_id, source_name, sender_display_name, text_redacted, created_at
+      FROM zalo_messages
+      WHERE source_id = ? AND created_at >= ?`;
+    const params = [String(sourceId), sinceIso];
+
+    if (cursor) {
+      sql += ` AND created_at < ?`;
+      params.push(String(cursor));
+    }
+
+    sql += ` ORDER BY created_at DESC LIMIT ?`;
+    params.push(lim + 1);
+
+    const rows = this.db.prepare(sql).all(...params);
+    const hasMore = rows.length > lim;
+    const items = hasMore ? rows.slice(0, lim) : rows;
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].created_at : null;
+
+    // Đảo thứ tự để hiển thị xuôi dòng thời gian (từ cũ đến mới)
+    items.reverse();
+    const formattedLines = items.map((r) => {
+      const timeStr = r.created_at ? r.created_at.slice(0, 16).replace("T", " ") : "";
+      const sender = r.sender_display_name || "Ẩn danh";
+      const text = (r.text_redacted || "").trim();
+      return `[${timeStr}] ${sender}: ${text}`;
+    });
+
+    return {
+      messages: items,
+      text: formattedLines.join("\n"),
+      count: items.length,
+      nextCursor,
+      hasMore,
+    };
+  }
+
+  /**
    * Ordered, cursor-based event feed for an authenticated Hermes platform
    * adapter. This intentionally returns only normalized/redacted fields; the
    * local bridge owns provider payloads and session material.

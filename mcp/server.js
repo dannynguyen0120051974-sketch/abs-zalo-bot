@@ -844,7 +844,8 @@ server.tool(
       "create_note", "change_avatar", "block_member", "unblock_member", "review_pending",
       "group_link_enable", "group_link_disable", "send_card", "send_bank_card",
       "friend_accept", "friend_reject", "friend_request", "friend_request_undo", "friend_remove",
-      "user_block", "user_unblock"
+      "user_block", "user_unblock",
+      "join_group_link", "join_group_invite_box", "get_group_link_info", "get_sticker_detail", "search_stickers"
     ]),
     payload: z.record(z.unknown()).describe("Action-specific fields; inspect bridge docs before invoking."),
     confirm: z.literal(true).describe("Must be true after the operator explicitly confirms the exact side effect."),
@@ -853,6 +854,110 @@ server.tool(
   async ({ action, payload, confirm, account_id }) => {
     try { return ok(await bridge("/api/personal/actions", { method: "POST", body: { action, payload, confirm, account_id } })); }
     catch (e) { return fail(e); }
+  },
+);
+
+server.tool(
+  "abs_zalo_join_group_link",
+  "Automatically join a Zalo group via invite link (e.g. https://zalo.me/g/...).",
+  {
+    link: z.string().describe("Group invite link or code"),
+    account_id: z.string().optional(),
+  },
+  async ({ link, account_id }) => {
+    try {
+      return ok(await bridge("/api/groups/join-link", { method: "POST", body: { link, account_id } }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.tool(
+  "abs_zalo_get_group_link_info",
+  "Inspect group details from an invite link before joining.",
+  {
+    link: z.string().describe("Group invite link or code"),
+    account_id: z.string().optional(),
+  },
+  async ({ link, account_id }) => {
+    try {
+      return ok(await bridge("/api/groups/link-info", { method: "POST", body: { link, account_id } }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.tool(
+  "abs_zalo_join_invite_box",
+  "Accept an invitation to join a group.",
+  {
+    group_id: z.string().describe("Target Zalo group ID"),
+    account_id: z.string().optional(),
+  },
+  async ({ group_id, account_id }) => {
+    try {
+      return ok(await bridge("/api/groups/join-invite-box", { method: "POST", body: { group_id, account_id } }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.tool(
+  "abs_zalo_get_sticker_detail",
+  "Get text description and image URL of a Zalo sticker by its ID.",
+  {
+    sticker_id: z.number().describe("Numeric sticker ID"),
+    account_id: z.string().optional(),
+  },
+  async ({ sticker_id, account_id }) => {
+    try {
+      return ok(await bridge(`/api/stickers/${encodeURIComponent(sticker_id)}${account_id ? `?account_id=${account_id}` : ""}`));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.tool(
+  "abs_zalo_search_stickers",
+  "Search Zalo stickers by keyword.",
+  {
+    keyword: z.string().describe("Keyword to search"),
+    account_id: z.string().optional(),
+  },
+  async ({ keyword, account_id }) => {
+    try {
+      return ok(await bridge(`/api/stickers/search?keyword=${encodeURIComponent(keyword)}${account_id ? `&account_id=${account_id}` : ""}`));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.tool(
+  "abs_zalo_history_range",
+  "Read chat message history across hours (since_hours, up to 168h / 7 days) from local SQLite store to summarize group discussions without calling Zalo API.",
+  {
+    group_id: z.string().describe("Target group or user ID"),
+    since_hours: z.number().optional().describe("Number of hours of history to read (default: 24, max: 168)"),
+    limit: z.number().optional().describe("Number of messages per page (default: 50, max: 100)"),
+    cursor: z.string().optional().describe("Pagination cursor for older messages"),
+    account_id: z.string().optional(),
+  },
+  async ({ group_id, since_hours, limit, cursor, account_id }) => {
+    try {
+      const q = new URLSearchParams();
+      if (since_hours) q.set("since_hours", String(since_hours));
+      if (limit) q.set("limit", String(limit));
+      if (cursor) q.set("cursor", String(cursor));
+      if (account_id) q.set("account_id", String(account_id));
+      return ok(await bridge(`/api/groups/${encodeURIComponent(group_id)}/history-range?${q.toString()}`));
+    } catch (e) {
+      return fail(e);
+    }
   },
 );
 
