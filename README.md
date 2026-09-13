@@ -188,6 +188,28 @@ For profile-aware quality, select `gateway_skill = "your-owner-authored-hermes-s
 
 ---
 
+## 🎭 5-Layer Agent Scaffolding (`templates/zalo-agent-scaffolding/`)
+
+Turn raw command-line AI into a warm, reliable, enterprise-grade Zalo AI Assistant in 60 seconds across 5 structured knowledge layers:
+
+| Layer | File | Purpose |
+| :--- | :--- | :--- |
+| **1. Soul** | `template_soul.md` | Core service philosophy, patience, empathy & outcome-driven mindset |
+| **2. Persona** | `template_persona.md` | Natural Vietnamese mobile chat tone, anti-AI-slop & F-shape reading layout |
+| **3. Identity** | `template_identity.md` | Role definition, RBAC boundaries, autonomous actions vs owner approval |
+| **4. Memory** | `template_memory.md` | Durable facts storage for recurring customers without context bloat |
+| **5. Context** | `template_context.md` | Business catalog, pricing packages, sales policies & intake workflows |
+
+### ⚡ 1-Command Setup
+To scaffold a complete 5-layer profile for your Hermes Agent, simply run:
+```bash
+bash templates/zalo-agent-scaffolding/setup.sh my-zalo-assistant
+hermes --profile my-zalo-assistant
+```
+*Read full documentation at [`docs/5-layer-agent-framework.md`](docs/5-layer-agent-framework.md).*
+
+---
+
 ## 🧠 Hermes Agent Starter Kit (`hermes-plugin/starter-kit/`)
 
 Ready-to-use "Digital Brain" template for Hermes Agent:
