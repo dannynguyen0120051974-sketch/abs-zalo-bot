@@ -3,6 +3,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import os from "node:os";
+import { spawnSync } from "node:child_process";
 
 const MAX_IMAGE_OR_FILE = 25 * 1024 * 1024;
 const MAX_AUDIO_OR_VIDEO = 100 * 1024 * 1024;
@@ -105,3 +107,102 @@ export function resolveStagedMedia(dataDir, eventId, attachmentId, metadata) {
   if (!full.startsWith(`${root}${path.sep}`) || !fs.existsSync(full)) return null;
   return { ...ref, full };
 }
+
+/**
+ * Đóng gói âm thanh thành M4A (AAC mono 44.1 kHz, 64k) với cờ +faststart
+ * để iPhone (AVPlayer) và Zalo PC (Chromium) phát mượt mà.
+ */
+export function transcodeToM4a(audioPath) {
+  if (!audioPath || !fs.existsSync(audioPath)) return null;
+  const ffmpeg = "ffmpeg";
+  const outputPath = path.join(os.tmpdir(), `zalo_voice_${crypto.randomBytes(6).toString("hex")}.m4a`);
+  try {
+    const res = spawnSync(
+      ffmpeg,
+      [
+        "-v", "error", "-y", "-i", audioPath,
+        "-vn", "-ac", "1", "-ar", "44100", "-c:a", "aac", "-b:a", "64k",
+        "-movflags", "+faststart",
+        outputPath,
+      ],
+      { timeout: 60000 }
+    );
+    if (res.status === 0 && fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
+      return outputPath;
+    }
+  } catch {
+    /* ffmpeg failed or not found */
+  }
+  try {
+    if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+/**
+ * Nối đuôi tệp (.m4a) vào link CDN Zalo nếu chưa có đuôi âm thanh.
+ * Zalo CDN bỏ qua đuôi này và trả đúng tệp, giúp iOS/PC detect MIME chuẩn.
+ */
+export function withAudioExtension(url, extension = ".m4a") {
+  if (!url || typeof url !== "string") return url;
+  try {
+    const parsed = new URL(url);
+    const pathname = parsed.pathname || "";
+    if (/\.(m4a|aac|mp3|wav|ogg)$/i.test(pathname)) {
+      return url;
+    }
+    const ext = extension.startsWith(".") ? extension : `.${extension}`;
+    parsed.pathname = `${pathname}${ext}`;
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Guard chống gửi lặp tin thoại vào cùng một chat trong cửa sổ thời gian (mặc định 10 phút).
+ */
+export function createVoiceDedupGuard({ windowMs = 10 * 60 * 1000, now = Date.now } = {}) {
+  const sentVoices = new Map();
+  return {
+    isDuplicate(chatId, filePath) {
+      if (!filePath || !fs.existsSync(filePath)) return false;
+      const currentTime = now();
+      for (const [k, v] of sentVoices.entries()) {
+        if (currentTime - v.at > windowMs) sentVoices.delete(k);
+      }
+      try {
+        const stat = fs.statSync(filePath);
+        const key = `${chatId}:${path.resolve(filePath)}:${stat.size}:${stat.mtimeMs}`;
+        return sentVoices.has(key);
+      } catch {
+        return false;
+      }
+    },
+    record(chatId, filePath, result = { ok: true }) {
+      if (!filePath || !fs.existsSync(filePath)) return;
+      try {
+        const stat = fs.statSync(filePath);
+        const key = `${chatId}:${path.resolve(filePath)}:${stat.size}:${stat.mtimeMs}`;
+        sentVoices.set(key, { at: now(), result });
+      } catch {
+        /* ignore */
+      }
+    },
+    get(chatId, filePath) {
+      try {
+        const stat = fs.statSync(filePath);
+        const key = `${chatId}:${path.resolve(filePath)}:${stat.size}:${stat.mtimeMs}`;
+        return sentVoices.get(key)?.result || null;
+      } catch {
+        return null;
+      }
+    },
+    clear() {
+      sentVoices.clear();
+    },
+  };
+}
+

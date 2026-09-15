@@ -81,3 +81,114 @@ export function createMemberDirectory({ fetchMembers, ttlMs = 10 * 60 * 1000, no
     },
   };
 }
+
+function escapeRegExp(str) {
+  return String(str || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function extractBotNames(displayName = "") {
+  const raw = String(displayName || "").trim();
+  if (!raw) return [];
+  const names = new Set([raw.toLowerCase()]);
+  const parts = raw.split(/\s+/).filter(Boolean);
+  if (parts.length > 1) {
+    for (const part of parts) {
+      const lower = part.toLowerCase();
+      if (lower.length >= 2) names.add(lower);
+    }
+    if (parts.length >= 3) {
+      const lastTwo = parts.slice(-2).join(" ").toLowerCase();
+      names.add(lastTwo);
+    }
+  }
+  return [...names].sort((a, b) => b.length - a.length);
+}
+
+const CALL_ONLY_WORDS = new Set([
+  "ơi", "oi", "à", "a", "ạ", "đâu", "dau", "đâu rồi", "dau roi",
+  "đây", "day", "alo", "hey", "hi", "hello", "nhé", "nhe", "nha",
+  "với", "voi", "giúp", "giup", "xem", "nghe", "đó", "do",
+  "rồi", "roi", "kìa", "kia", "này", "nay",
+]);
+
+/**
+ * Kiểm tra xem tin nhắn có nhắc tới Bot không:
+ * 1. Zalo frame mentions (nếu có UID của bot).
+ * 2. Gõ tay @bot, @TênHiểnThị, @TênNgắn.
+ * 3. Nếu là Chủ nhân (isOwner === true): Cho phép gọi thẳng không cần @ (vd: "Amon ơi", "Lavie đâu rồi", "chào Amon").
+ */
+export function isBotMentioned(
+  text,
+  { displayName = "", selfUid = "", isOwner = false, frameMentions = [] } = {}
+) {
+  const raw = String(text || "").trim();
+  if (!raw) return false;
+
+  // 1. Zalo native frame mentions
+  if (selfUid && Array.isArray(frameMentions) && frameMentions.length) {
+    const hasSelf = frameMentions.some((m) => {
+      const uid = String(m?.uid ?? m?.userId ?? m?.id ?? "");
+      return uid === String(selfUid);
+    });
+    if (hasSelf) return true;
+  }
+
+  const botNames = extractBotNames(displayName);
+  const escapedNames = ["bot", ...botNames.map(escapeRegExp)].join("|");
+
+  // 2. Explicit text mentions: @bot, @Tên
+  const mentionRe = new RegExp(`(^|\\s)@(?:${escapedNames})(?:\\s|[.,?!:;]|\$)`, "i");
+  if (mentionRe.test(raw)) return true;
+
+  // 3. Chủ nhân gọi trực tiếp không cần @
+  if (isOwner && botNames.length > 0) {
+    const namesAlt = botNames.map(escapeRegExp).join("|");
+    // Bắt đầu bằng tên bot: "Amon ...", "Lavie: ..."
+    const startRe = new RegExp(`^(?:${namesAlt})(?:\\s+|[.,?!:;]|\$)`, "i");
+    if (startRe.test(raw)) return true;
+
+    // Cụm gọi thông dụng: "Amon ơi", "chào Amon", "Amon đâu", "nhờ Amon"
+    const callRe = new RegExp(
+      `(?:(?:chào|chao|alo|hey|hi|nhờ|nho|hỏi|hoi)\\s+(?:${namesAlt})|(?:${namesAlt})\\s*(?:ơi|oi|à|a|ạ|đâu|dau))`,
+      "i"
+    );
+    if (callRe.test(raw)) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Kiểm tra xem có phải là Bare Call (chỉ gọi trơ tên bot kèm từ đệm, không có nội dung)
+ * để bốc lịch sử tin nhắn gần nhất trong nhóm làm context trả lời.
+ */
+export function isBareCall(text, displayName = "") {
+  const raw = String(text || "").trim();
+  if (!raw) return false;
+
+  const botNames = extractBotNames(displayName);
+  let cleaned = raw;
+
+  // Loại bỏ @mention
+  cleaned = cleaned.replace(/@\S+/g, " ");
+
+  // Loại bỏ tên bot
+  for (const name of ["bot", ...botNames]) {
+    const re = new RegExp(`\\b${escapeRegExp(name)}\\b`, "gi");
+    cleaned = cleaned.replace(re, " ");
+  }
+
+  // Tách các từ còn lại, bỏ dấu câu
+  const tokens = cleaned
+    .toLowerCase()
+    .replace(/[.,?!:;~^/\-_+*#()]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (tokens.length === 0) return true;
+
+  // Nếu tất cả các từ còn lại đều là từ gọi đệm
+  const allCallWords = tokens.every((token) => CALL_ONLY_WORDS.has(token));
+  return allCallWords;
+}
+

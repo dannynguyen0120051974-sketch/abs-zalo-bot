@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { EventEmitter } from "node:events";
 import { normalizeInboundMessage, utcNow } from "./schema.js";
-import { stageHermesMedia } from "./hermes_media.js";
+import { stageHermesMedia, withAudioExtension } from "./hermes_media.js";
 import { buildZaloStyledMessage, splitIntoSafeZaloChunks } from "./zalo_styler.js";
 import { findMentions } from "./zalo_mentions.js";
 import { enrichSticker, stickerRefOf } from "./zalo_stickers.js";

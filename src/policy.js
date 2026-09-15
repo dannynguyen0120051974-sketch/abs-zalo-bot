@@ -179,6 +179,34 @@ export class PolicyGuard {
       };
     }
 
+    // Owner-only groups: Bot stays completely silent unless the sender is the owner.
+    // Non-owner messages are silently stored for context/history without triggering replies.
+    if (
+      event.source_type === "group" &&
+      this.config.owner_only_groups?.has(event.source_id)
+    ) {
+      const isOwner = event.is_self || this.roleOf(event.account_id, event.sender_id) === "owner";
+      if (!isOwner) {
+        const ingestCount = this.store.countInboundRecent(event.account_id, 60);
+        if (ingestCount >= this.ingestPerHour) {
+          return { allow: false, reason: "ingest_rate", policy: null, actions: [] };
+        }
+        return {
+          allow: true,
+          reason: "owner_only_group_silent_store",
+          policy: {
+            account_id: event.account_id,
+            source_id: event.source_id,
+            source_type: "group",
+            source_name: event.source_name || "",
+            mode: "listen_only",
+            muted: true,
+          },
+          actions: ["store"],
+        };
+      }
+    }
+
     // Source groups: READ_ONLY — store only, never reply even if tagged/quoted.
     if (this.config.listen_all_groups && event.source_type === "group") {
       const ingestCount = this.store.countInboundRecent(event.account_id, 60);

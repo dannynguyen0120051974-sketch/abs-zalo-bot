@@ -124,6 +124,15 @@ export function loadConfig(configPath) {
     viewer: Array.isArray(data.roles?.viewer) ? data.roles.viewer.map(String) : [],
   };
 
+  const ownerOnlyGroups = new Set(
+    (Array.isArray(data.owner_only_groups)
+      ? data.owner_only_groups.map(String)
+      : String(process.env.ZALO_OWNER_ONLY_GROUPS || data.owner_only_groups || "").split(",")
+    )
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+
   let agentProfiles;
   try {
     agentProfiles = normalizeAgentProfiles(data.agent_profiles, defaultAccountId);
@@ -171,6 +180,7 @@ export function loadConfig(configPath) {
     dashboard_port: Number(process.env.PORT || data.dashboard_port || 3871),
     sources: normalizedSources,
     destination,
+    owner_only_groups: ownerOnlyGroups,
     rate_limit: rateLimit,
     roles,
     hermes,

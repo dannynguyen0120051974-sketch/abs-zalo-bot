@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.9.0 (2026-09-15)
+
+### Ported & Enhanced from 2anh-zalo-bot v1.9.2–v1.10.3
+
+- **Voice Note Transcoding for iPhone & Zalo PC:** Đóng gói âm thanh qua ffmpeg sang container M4A (AAC mono 44.1kHz, 64k) kèm cờ `+faststart` (đưa atom `moov` lên đầu stream) và tự động nối đuôi `.m4a` vào link CDN Zalo (`withAudioExtension`), giải quyết triệt để lỗi không nghe được hoặc undefined duration trên iOS (AVPlayer) và Desktop (Chromium).
+- **Voice Dedup Guard (10 phút):** Cơ chế `createVoiceDedupGuard` ghi nhớ chữ ký `(chatId, filePath, size, mtime)` trong 10 phút, ngăn chặn việc bot gửi lặp 2 lần tin thoại khi gateway tự động nhặt tag media TTS.
+- **Owner Wakeup & Short Name Parsing:** Chủ nhân (`isOwner === true`) được phép đánh thức bot trực tiếp mà không cần gõ `@` (*"Amon ơi"*, *"chào Amon"*, *"Amon đâu"*...). Hỗ trợ nhận diện text tag gõ tay khi nhóm ẩn danh sách thành viên.
+- **Bare Call Context Buffer:** Nhận diện khi được gọi trơ tên bot kèm thán từ đệm (`isBareCall`) để bốc rolling context 5 tin gần nhất từ store nạp cho model.
+- **Owner-only Groups Mode:** Hỗ trợ cấu hình `owner_only_groups` (`ZALO_OWNER_ONLY_GROUPS`). Trong các nhóm này, bot chỉ âm thầm lưu tin nhắn làm tai mắt (`owner_only_group_silent_store`), tuyệt đối im lặng với người ngoài, chỉ phản hồi khi chủ nhân ra lệnh.
+
 ## v0.7.1 (2026-09-11)
 
 ### Ported from 2anh-zalo-bot v1.1.1–v1.3.0
